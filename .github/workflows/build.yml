@@ -1,0 +1,55 @@
+name: Build MeshLink APK from ZIP
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: unzip -q Bluetooth-chats-fixed.zip -d extracted
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.3.1
+
+      - name: Create debug keystore
+        working-directory: extracted/fixed
+        run: >
+          keytool -genkeypair -v -keystore debug.keystore
+          -storepass android -keypass android -alias androiddebugkey
+          -keyalg RSA -keysize 2048 -validity 10000
+          -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Build debug APK
+        working-directory: extracted/fixed
+        run: gradle assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MeshLink-debug-apk
+          path: extracted/fixed/app/build/outputs/apk/debug/*.apk
+
+      - name: Run unit tests
+        working-directory: extracted/fixed
+        continue-on-error: true
+        run: gradle testDebugUnitTest --stacktrace
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: extracted/fixed/app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
